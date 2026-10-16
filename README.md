@@ -1,59 +1,82 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Website Auditor — аудит страницы с помощью AI
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+Прототип веб-сервиса на Laravel: пользователь задаёт URL, приложение открывает страницу в Playwright, извлекает её содержимое и запрашивает рекомендации через OpenAI API.
 
-## About Laravel
+**Статус:** прототип с серверной очередью задач. Для полного сценария нужны настроенный API-ключ, браузерное окружение и запущенный обработчик очереди.
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+## Как устроен сценарий
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+1. Форма создаёт запись аудита со статусом `pending`.
+2. Фоновая задача проверяет исходный URL и запускает браузерный рендер.
+3. Из HTML извлекаются данные страницы для анализа.
+4. Внешний API возвращает рекомендации; результат и статус сохраняются в базе.
+5. Интерфейс получает обновления через маршрут проверки статуса.
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+В отчёт запрашиваются разделы SEO, контента, UX, маркетинга и наблюдаемых признаков безопасности. Это рекомендации по данным страницы; полноценное сканирование уязвимостей сервис не выполняет.
 
-## Learning Laravel
+## Технологии
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework. You can also check out [Laravel Learn](https://laravel.com/learn), where you will be guided through building a modern Laravel application.
+PHP 8.2+, Laravel 12, Eloquent, очереди Laravel, Node.js, Playwright, Chromium, HTTP API, Blade и Vite.
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+## Навигация по реализации
 
-## Laravel Sponsors
+| Часть | Файл |
+| --- | --- |
+| Создание аудита и выдача статуса | [SiteAuditController](app/Http/Controllers/SiteAuditController.php) |
+| Выполнение фоновой задачи | [RunSiteAuditJob](app/Jobs/RunSiteAuditJob.php) |
+| Проверка исходного URL | [SsrfGuard](app/Services/Audit/SsrfGuard.php) |
+| Запуск браузерного процесса | [PlaywrightRenderService](app/Services/Audit/PlaywrightRenderService.php) |
+| Рендер страницы | [scripts/render.mjs](scripts/render.mjs) |
+| Извлечение содержимого | [PageExtractService](app/Services/Audit/PageExtractService.php) |
+| Запрос к языковой модели | [OpenAiAuditService](app/Services/Audit/OpenAiAuditService.php) |
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+## Локальный запуск
 
-### Premium Partners
+```bash
+git clone https://github.com/boot88/auditor.git
+cd auditor
+composer install
+cp .env.example .env
+php artisan key:generate
+npm ci
+npx playwright install chromium
+npm run build
+```
 
-- **[Vehikl](https://vehikl.com)**
-- **[Tighten Co.](https://tighten.co)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Redberry](https://redberry.international/laravel-development)**
-- **[Active Logic](https://activelogic.com)**
+Установите системные зависимости браузера для своей ОС. Настройте отдельную локальную БД; при использовании SQLite создайте `database/database.sqlite`.
 
-## Contributing
+Добавьте в `.env`:
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+```dotenv
+QUEUE_CONNECTION=database
+OPENAI_API_KEY=
+OPENAI_MODEL=gpt-4.1-mini
+OPENAI_API_BASE=https://api.openai.com/v1
+NODE_BINARY=node
+```
 
-## Code of Conduct
+API-ключ заполняется локально. В текущем коде сервис анализа читает эти значения непосредственно из окружения, поэтому для этого локального сценария оставьте конфигурацию без `config:cache`.
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+```bash
+php artisan migrate
+php artisan serve
+```
 
-## Security Vulnerabilities
+В другом терминале:
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+```bash
+php artisan queue:work
+```
 
-## License
+Форма: `http://127.0.0.1:8000/audit`. Страница аудита показывает состояние задачи и полученный отчёт.
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+## Особенности
+
+- Браузерный рендер позволяет получать содержимое JavaScript-страниц.
+- В базе сохраняются HTTP-статус, итоговый URL, время рендера и анализа.
+- Проверка исходного URL ограничивает протоколы, порты и локальные адреса.
+- Проверка ответа модели разбирает JSON и наличие обязательных полей.
+- Результат зависит от доступности страницы, качества извлечённого содержимого и ответа внешнего API.
+- Вызовы внешнего API требуют доступа к выбранной модели и могут тарифицироваться провайдером.
+
+Команда существующего набора тестов: `php artisan test`. Сквозная проверка требует настроенных внешних зависимостей.
